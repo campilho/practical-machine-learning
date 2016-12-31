@@ -1,0 +1,108 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Fernando Campilho"
+date: "12/30/2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+
+In this project, we will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants available in the Weight Lifting Exercise Dataset (http://groupware.les.inf.puc-rio.br/har#weight_lifting_exercises). They were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+The goal of this project is to predict the manner in which they did the exercise ("classe" variable in the training set).
+
+## Getting and Cleaning Data 
+
+```{r loadData}
+
+setwd("~/Documents/Personal/Coursera/Course/08 - Practical Machine Learning/Exercises/CourseProject")
+
+set.seed(1234)
+
+# Downloading data
+if (!file.exists("data")) {
+  dir.create("data")
+}
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(trainUrl, destfile = "./data/pml-training.csv")
+list.files("./data")
+dateDownloaded <- date()
+dateDownloaded
+
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(testUrl, destfile = "./data/pml-testing.csv")
+list.files("./data")
+dateDownloaded <- date()
+dateDownloaded
+
+# Loading training and testing data
+training <- read.csv("./data/pml-training.csv",na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv("./data/pml-testing.csv",na.strings=c("NA","#DIV/0!",""))
+
+# Checking column names for both datasets
+names(training)
+names(testing)
+
+# Checking if first 159 column names are exactly the same, they only differ in the 160th variable: "classe" in the training dataset and "problem_id" in the testing dataset
+all.equal(names(training)[1:length(names(training))-1], names(testing)[1:length(names(testing))-1])
+
+# Frequency of each "classe" in the training dataset
+table(training$classe)
+
+# Removing irrelevant variables for predicting "classe": user_name, raw_timestamp_part_1, raw_timestamp_part_,2 cvtd_timestamp, new_window, and  num_window (columns 1 to 7). 
+training <- training[,-c(1:7)]
+testing <- testing[,-c(1:7)]
+
+# Removing zero covariates in the training dataset
+library(caret)
+nsv <- nearZeroVar(training,saveMetrics = TRUE)
+training <- training[,!nsv$nzv]
+dim(training)
+
+# Removing columns with NAs
+training<-training[,colSums(is.na(training)) == 0]
+testing <-testing[,colSums(is.na(testing)) == 0]
+all.equal(names(training)[1:length(names(training))-1], names(testing)[1:length(names(testing))-1])
+```
+
+## Cross-validation
+
+### Splitting training dataset into two datasets: 60% for myTraining, 40% for myTesting
+
+```{r dataSplit}
+inTrain <- createDataPartition(y=training$classe, p=0.6, list=FALSE)
+myTraining <- training[inTrain, ]
+myTesting <- training[-inTrain, ]
+dim(myTraining)
+dim(myTesting)
+```
+
+## Model 1 - Predicting Using Classification Tree
+```{r modFit1}
+library(rpart)
+modFit1 <- rpart(classe ~ ., data=myTraining, method="class")
+prediction1 <- predict(modFit1, myTesting, type = "class")
+confusionMatrix(prediction1, myTesting$classe)
+```
+
+## Model 2 - Predicting Using Random Florest
+```{r modFit2}
+library(randomForest)
+modFit2 <- randomForest(classe ~ ., data=myTraining, method="class")
+prediction2 <- predict(modFit2, myTesting, type = "class")
+confusionMatrix(prediction2, myTesting$classe)
+```
+
+As expected, Model 2 Random Forest accuracy (0.9908) is much better than Model 1 Classification Tree (0.7471). We will now predict "classe" using Model 2 on the testing dataset. The expected out-of-sample error is estimated to be less than 1%.
+
+## Predicting "classe" using Model 2 on the testing dataset
+
+```{r testing}
+prediction <- predict(modFit2, testing, type = "class")
+prediction
+```
+
